@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# LOAD ENVIRONMENT VARIABLES
+if [ -f config.env ]; then
+    export $(cat config.env | xargs)
+fi
+
+
+# THRESHOLDERS
+CPU_THRESHOLD=80
+MEM_THRESHOLD=80
+DISK_THRESHOLD=80
+
+check_cpu_mem() {
+    CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
+    MEM_USAGE=$(free | grep Mem | awk '{print $3/$2 * 100.0}' | sed 's/,/./')
+
+    echo "CPU Usage: $CPU_USAGE%"
+    echo "Memory Usage: $MEM_USAGE%"
+
+    if (( $(echo "$CPU_USAGE > $CPU_THRESHOLD" | bc -l) )); then
+        echo "CPU usage is above threshold!"
+        echo "CPU usage is above threshold!" | mail -s "CPU Alert" "$ALERT_EMAIL"
+    fi
+
+    if (( $(echo "$MEM_USAGE > $MEM_THRESHOLD" | bc -l) )); then
+        echo "Memory usage is above threshold!"
+        echo "Memory usage is above threshold!" | mail -s "Memory Alert" "$ALERT_EMAIL"
+    fi
+}
+
+check_disk() {
+    DISK_USAGE=$(df -h / | grep / | awk '{print $5}' | sed 's/%//g')
+
+    echo "Disk usage: $DISK_USAGE%"
+
+    if [ "$DISK_USAGE" -gt "$DISK_THRESHOLD" ]; then
+        echo "Disk usage is above threshold!"
+        echo "Disk usage is above threshold!" | mail -s "Disk Alert" "$ALERT_EMAIL"
+    fi
+}
+
+check_network() {
+    INTERFACE=$(ip -o -4 route show to default | awk '{print $5}')
+    RX_BYTES=$(cat /sys/class/net/$INTERFACE/statistics/rx_bytes)
+    TX_BYTES=$(cat /sys/class/net/$INTERFACE/statistics/tx_bytes)
+
+    echo "Network Received: $RX_BYTES bytes"
+    echo "Network Transmitted: $TX_BYTES bytes"
+}
+
+main() {
+    check_cpu_mem
+    check_disk
+    check_network
+}
+
+main
+
